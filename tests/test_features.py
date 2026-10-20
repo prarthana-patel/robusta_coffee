@@ -10,6 +10,15 @@ from features import Store, account_id, png_bytes, pdf_report, uncertainty
 
 ROOT=Path(__file__).resolve().parents[1]
 
+def audio_fixture(seconds=1):
+    import wave
+    buffer=io.BytesIO()
+    with wave.open(buffer,'wb') as w:
+        w.setnchannels(1);w.setsampwidth(2);w.setframerate(16000)
+        w.writeframes(b'\0\0'*16000*seconds)
+    return buffer.getvalue()
+
+
 def result():
     return dict(scan_id=1,record_id='r',label='Rust',task='Disease',time='2026-10-20T00:00:00+00:00',confidence=70,votes=1,agreement=100,probabilities=[.2,.1,.7],classes=['Healthy','Red Spider Mite','Rust'], predictions=[dict(model='Test',label='Rust',confidence=70,class_source='verified fixture')],failed_models=[],method='fixture')
 
@@ -79,13 +88,13 @@ def test_voice_transcription_mock_and_failure():
     from voice import transcribe
     response=MagicMock(status_code=200)
     response.json.return_value={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':'What is coffee?'}]}}]}
-    with patch('voice.httpx.post',return_value=response) as post:
-        assert transcribe(b'fixture','audio/wav','not-real','gemini-test')=='What is coffee?'
-        assert post.call_args.kwargs['follow_redirects'] is False
-    with pytest.raises(ValueError): transcribe(b'a','audio/wav','','gemini-test')
+    with patch('voice.httpx.AsyncClient.post',return_value=response) as post:
+        assert transcribe(audio_fixture(),'audio/wav','not-real','gemini-test')=='What is coffee?'
+        assert post.call_args.kwargs['json']['generationConfig']['maxOutputTokens']==512
+    with pytest.raises(ValueError): transcribe(audio_fixture(),'audio/wav','','gemini-test')
     response.status_code=403
-    with patch('voice.httpx.post',return_value=response),pytest.raises(ValueError,match='denied'):
-        transcribe(b'a','audio/wav','not-real','gemini-test')
+    with patch('voice.httpx.AsyncClient.post',return_value=response),pytest.raises(ValueError,match='denied'):
+        transcribe(audio_fixture(),'audio/wav','not-real','gemini-test')
 
 def test_gradcam_synthetic_only():
     import torch
@@ -236,8 +245,8 @@ def test_voice_fallback_uses_canonical_audio_payload():
     from voice import transcribe
     unavailable=httpx.Response(400,json={'error':{'status':'INVALID_ARGUMENT'}})
     success=httpx.Response(200,json={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':'What is coffee?'}]}}]})
-    with patch('voice.httpx.post',side_effect=[unavailable,success]) as post:
-        assert transcribe(b'fixture','audio/wav','fake','gemini-primary','gemini-backup')=='What is coffee?'
+    with patch('voice.httpx.AsyncClient.post',side_effect=[unavailable,success]) as post:
+        assert transcribe(audio_fixture(),'audio/wav','fake','gemini-primary','gemini-backup')=='What is coffee?'
         assert post.call_count==2
         assert '/gemini-backup:' in post.call_args.args[0]
         data=post.call_args.kwargs['json']['contents'][0]['parts'][1]['inlineData']
@@ -248,8 +257,33 @@ def test_voice_quota_auth_and_invalid_response_no_retry():
     import httpx
     from voice import transcribe
     for code,payload,message in [(429,{},'quota'),(403,{},'denied'),(400,{'error':{'details':[{'reason':'API_KEY_INVALID'}]}},'authentication')]:
-        with patch('voice.httpx.post',return_value=httpx.Response(code,json=payload)) as post:
-            with pytest.raises(ValueError,match=message):transcribe(b'fixture','audio/wav','fake','gemini-primary','gemini-backup')
+        with patch('voice.httpx.AsyncClient.post',return_value=httpx.Response(code,json=payload)) as post:
+            with pytest.raises(ValueError,match=message):transcribe(audio_fixture(),'audio/wav','fake','gemini-primary','gemini-backup')
             assert post.call_count==1
-    with patch('voice.httpx.post',return_value=httpx.Response(200,content=b'not-json')):
-        with pytest.raises(ValueError,match='invalid response'):transcribe(b'fixture','audio/wav','fake','gemini-primary')
+    with patch('voice.httpx.AsyncClient.post',return_value=httpx.Response(200,content=b'not-json')):
+        with pytest.raises(ValueError,match='invalid response'):transcribe(audio_fixture(),'audio/wav','fake','gemini-primary')
+
+def test_voice_language_hint_duration_and_timeout():
+    import httpx
+    from voice import transcribe
+    response=httpx.Response(200,json={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':'coffee andre enu'}]}}]})
+    with patch('voice.httpx.AsyncClient.post',return_value=response) as post:
+        assert transcribe(audio_fixture(),'audio/wav','fake','gemini-primary',language_hint='Kannada / Kanglish')=='coffee andre enu'
+        prompt=post.call_args.kwargs['json']['contents'][0]['parts'][0]['text']
+        assert 'Do not translate Kannada into English' in prompt
+    with pytest.raises(ValueError,match='under 30 seconds'):
+        transcribe(audio_fixture(31),'audio/wav','fake','gemini-primary')
+    with patch('voice.httpx.AsyncClient.post',side_effect=httpx.ReadTimeout('timeout')) as post:
+        with pytest.raises(ValueError,match='too long'):
+            transcribe(audio_fixture(),'audio/wav','fake','gemini-primary','gemini-backup')
+        assert post.call_count==1
+
+
+def test_market_panels_distinguish_benchmarks():
+    from market_widget import quote_widget_html, BENCHMARKS
+    assert BENCHMARKS['Robusta'][2]=='USD per metric tonne'
+    assert BENCHMARKS['Arabica'][2]=='US cents per pound'
+    assert 'ICEEUR:RC1!' in quote_widget_html('Robusta')
+    assert 'ICEUS:KC1!' in quote_widget_html('Arabica','light')
+    assert 'embed-widget-symbol-info.js' in quote_widget_html('Robusta')
+    with pytest.raises(ValueError):quote_widget_html('Arabica','invalid')

@@ -41,3 +41,10 @@ Protected model functions/constants and Coffee AI prompt/request functions are A
 - `voice.transcribe`: canonical audio payload; distinct backup on request/model/temporary failures; no quota/auth retries; bounded requests and safe response parsing.
 - `voice._http_error`, `voice._transcript`, `voice.TranscriptionError`: safe diagnostic categories and malformed-response handling without provider-body disclosure.
 - `chat_page`: independent, audio-checked transcription default and configurable distinct fallback; existing inline review-before-send UX preserved.
+
+## Voice latency and coffee markets
+
+- `voice.transcribe`: readable WAV/duration validation; explicit speech-language hints; stricter verbatim/code-switching instruction; lower output budget; asynchronous total deadline; no second long request after timeout.
+- `chat_page`: separate speech-language selector and short-recording guidance; existing inline microphone and editable draft preserved.
+- `market_widget`: official provider-hosted Robusta and Arabica quote embeds, distinct units and direct market links; no synthesized quotes.
+- `render_market_card`, `fetch_robusta_market_data`: market panels on Home, truthful data-delay labels, one-minute API snapshot refresh and six-second request timeout. Barchart authentication remains an external requirement.

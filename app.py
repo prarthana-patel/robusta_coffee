@@ -1155,7 +1155,7 @@ def submit_feedback(name, sender, suggestion):
 
 
 # ========================= ROBUSTA MARKET =========================
-@st.cache_data(ttl=600, show_spinner=False, max_entries=8)
+@st.cache_data(ttl=60, show_spinner=False, max_entries=8)
 def fetch_robusta_market_data(symbol="RM*0"):
     """Barchart OnDemand getQuote; only validated Robusta futures, no fallback prices.
 
@@ -1169,7 +1169,7 @@ def fetch_robusta_market_data(symbol="RM*0"):
             return None
         if not re.fullmatch(r"RM(?:\*[01]|[FHKNUX]\d{2})", symbol):
             raise ValueError("Unsupported Robusta symbol")
-        with httpx.Client(timeout=httpx.Timeout(25, connect=5), follow_redirects=False) as client:
+        with httpx.Client(timeout=httpx.Timeout(6, connect=3), follow_redirects=False) as client:
             response = client.post("https://ondemand.websol.barchart.com/getQuote.json",
                                    data={"apikey": key, "symbols": symbol})
         if response.status_code != 200:
@@ -1208,17 +1208,19 @@ def fetch_robusta_market_data(symbol="RM*0"):
         return None
 
 
-@st.fragment(run_every="10m")
+@st.fragment(run_every="1m")
 def render_market_card():
     # Fragment refreshes don't rerun analysis or load models.
     with st.container(border=True):
-        markup('<div class="eyebrow">ROBUSTA MARKET</div>')
+        markup('<div class="eyebrow">COFFEE MARKET / ROBUSTA & ARABICA</div>')
+        from market_widget import render_quote_widgets
+        render_quote_widgets("light" if st.session_state.ui_theme == "Light" else "dark")
         symbol = setting("MARKET_SYMBOL", "RM*0")
         if st.button("Refresh price", key="refresh_robusta_price"):
             fetch_robusta_market_data.clear(symbol)
         quote = fetch_robusta_market_data(symbol)
         if quote is None:
-            st.info("Market data is temporarily unavailable.")
+            st.caption("The Barchart API quote is unavailable. The provider panels and source links above are independent; an API quote requires a valid MARKET_API_KEY with Robusta data access.")
             return
         st.metric("Latest available price", f"${quote['price']:,.0f}",
                   f"{quote['change']:+,.0f} ({quote['percent']:+.2f}%)",
@@ -1226,7 +1228,7 @@ def render_market_card():
         st.caption("USD / metric tonne · Change versus previous close")
         st.write(f"Benchmark: {quote['name']} ({quote['symbol']}) · ICE Futures Europe")
         st.caption(f"Last market update: {quote['timestamp']} · {quote['timing']}")
-        st.caption(f"Fetched: {quote['retrieved_at']} · Refreshes every 10 minutes while this page is open.")
+        st.caption(f"Fetched: {quote['retrieved_at']} · API snapshot refreshes every minute while this page is open.")
         st.caption("Market open/closed status is not supplied by this endpoint. When trading is closed, "
                    "the latest available trade remains displayed with its original timestamp.")
         st.caption("Source: [Barchart OnDemand](https://www.barchart.com/ondemand) · "
@@ -1424,6 +1426,7 @@ def chat_page():
     with st.expander("CONVERSATION OPTIONS"):
         language = st.selectbox("Response language", ["Auto: match language and script", "English",
             "Kannada script", "Kanglish (Romanized Kannada)", "Hindi", "Romanized Hindi", "Tulu", "Romanized Tulu", "Tamil", "Malayalam"], key="language")
+        speech_language = st.selectbox("Speech language", ["Auto", "Kannada / Kanglish", "Kannada script", "English", "Hindi", "Tulu", "Tamil", "Malayalam"], key="speech_language", help="Choose the language you speak to improve transcription. This does not change Coffee AI's response language.")
         if st.button("CLEAR CONVERSATION"):
             st.session_state.ai_turns = []
             st.session_state.ai_display = []
@@ -1449,7 +1452,7 @@ def chat_page():
     if "pending_voice_draft" in st.session_state:
         st.session_state.coffee_composer = st.session_state.pop("pending_voice_draft")
     retry = st.session_state.pending_question and st.button("RETRY LAST QUESTION")
-    st.caption("Use the microphone in the message box to record. Submitting a recording sends it to Gemini for transcription; review the text here before sending your question.")
+    st.caption("Record a short question (5–15 seconds). Choose Speech language in Conversation options for better recognition. Audio goes to Gemini only when submitted; review the transcript before sending.")
     submitted = st.chat_input("ASK ROCOLE ANYTHING ABOUT COFFEE...", key="coffee_composer", accept_audio=True,
                               audio_sample_rate=16000, max_upload_size=8,
                               disabled=not setting("GEMINI_API_KEY"), max_chars=2000)
@@ -1461,10 +1464,10 @@ def chat_page():
             from voice import transcribe
             try:
                 with st.spinner("Transcribing your recording..."):
-                    transcription_model = setting("GEMINI_TRANSCRIPTION_MODEL", "gemini-3.5-flash-lite")
+                    transcription_model = setting("GEMINI_TRANSCRIPTION_MODEL", "gemini-3.1-flash-lite")
                     default_backup = "gemini-3.1-flash-lite" if transcription_model.removeprefix("models/") == "gemini-3.5-flash-lite" else "gemini-3.5-flash-lite"
                     transcript = transcribe(recording.getvalue(), recording.type, setting("GEMINI_API_KEY"), transcription_model,
-                                            setting("GEMINI_TRANSCRIPTION_BACKUP_MODEL", default_backup))
+                                            setting("GEMINI_TRANSCRIPTION_BACKUP_MODEL", default_backup), language_hint=speech_language)
                 st.session_state.pending_voice_draft = "\n".join(part for part in (text.strip(), transcript) if part)[:2000]
                 st.rerun()
             except ValueError as exc:
