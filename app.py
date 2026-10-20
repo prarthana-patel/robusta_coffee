@@ -19,6 +19,7 @@ import sqlite3
 import logging
 import math
 import socket
+from model_paths import model_directory
 from contextlib import closing
 from features import Store, account_id, png_bytes, guidance, uncertainty, pdf_report
 import uuid
@@ -36,8 +37,8 @@ logging.getLogger("httpx").disabled = True
 logging.getLogger("httpcore").disabled = True
 
 # ========================= CONFIGURATION =========================
-PROJECT_DIR = "/content/drive/MyDrive/MaxViT_Coffee_Project"
-ROCOLE_PHASE2_DIR = "/content/drive/MyDrive/RoCoLe_Phase2_Project"
+PROJECT_DIR = model_directory("nutrient")
+ROCOLE_PHASE2_DIR = model_directory("disease")
 ROCOLE_EXTRACTED_DIR = "/content/drive/MyDrive/RoCoLe_Extracted"
 ROOTS = {
     "Disease": [

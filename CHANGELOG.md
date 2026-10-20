@@ -15,3 +15,5 @@
 - `explain.spatial_gradcam`: experimental explicit-layer spatial Grad-CAM; isolated from app inference, not checkpoint validated.
 
 Protected model functions/constants and Coffee AI prompt/request functions are AST-identical to the original upload; verified by regression test. Added modules, requirements, example secrets, setup guide and tests. No model checkpoint, calibration, severity model or research metrics were fabricated.
+
+- `model_paths.model_directory`: server-side per-task process overrides, portable checkout folders, supplied Windows folders, and existing Colab fallback. Original checkpoint filenames, loading checks and classifier behavior remain unchanged.

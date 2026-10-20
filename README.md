@@ -1,6 +1,6 @@
 # RoCoLe development setup
 
-Python 3.12; CPU runtime is supported. The original uploaded source is retained outside the checkout in `/workspace/attachments/`. No changes were made to the model architectures, training paths, checkpoint selection/loading, preprocessing, class mappings, ensemble calculation, or Coffee AI prompt/request functions.
+Python 3.12; CPU runtime is supported. The original uploaded source is retained outside the checkout in `/workspace/attachments/`. No changes were made to the model architectures, checkpoint selection/loading, preprocessing, class mappings, ensemble calculation, or Coffee AI prompt/request functions.
 
 ## Install and run
 
@@ -27,7 +27,7 @@ Use process variables or private `.streamlit/secrets.toml`. `.streamlit/secrets.
 - **Profiles/history:** set absolute `ROCOLE_DB_PATH` to an operator-managed database path. Signed-in users can save display name, farm name, region, variety, notes, and future scans with PNG images. History is paginated and owner-filtered for every query and deletion. Anonymous history is session-only, without the previous 20-record truncation. Anonymous scans are not silently migrated into an account. Clear Session does not delete account data. Individual account scan deletion requires confirmation. Persistence across local SQLite connections is tested; a path or flag does not prove volume durability. Configure backups, access permissions and retention for the deployment.
 - **Feedback:** optional `FEEDBACK_DB_PATH` plus `FEEDBACK_DB_PERSISTENT=true` only after independently verifying storage durability. Its parent directory must already exist. Optional `SMTP_HOST`, `SMTP_PORT` (587 STARTTLS or 465 TLS), `SMTP_USER`, `SMTP_PASSWORD`, `FEEDBACK_TO_EMAIL`. Both configured backends are attempted. Safe status distinguishes storage, configuration, auth, recipient, connection, TLS and server failures. SMTP acceptance is not verified inbox delivery. SMTP credentials require actual server-side secret injection; HTTPS proxy placeholders are not SMTP passwords.
 - **Market:** `MARKET_API_KEY` with licensed Barchart Robusta data. Provider connectivity and entitlement are separate from app startup.
-- **Inference:** provide only trusted trained checkpoints at the exact paths listed in `app.py`, and verified training class mapping metadata/sidecars. SYSTEM is now reachable for runtime diagnostics and manual selections. Never substitute random weights. The original unverified-class-order fallback remains explicit.
+- **Inference:** provide only trusted trained checkpoints in `models/nutrient` and `models/disease` (see `models/README.md` for filenames, Windows paths and environment overrides), and verified training class mapping metadata/sidecars. SYSTEM is now reachable for runtime diagnostics and manual selections. Never substitute random weights. The original unverified-class-order fallback remains explicit.
 
 ## Reports, guidance and research limits
 
@@ -40,3 +40,7 @@ Condition-specific guidance suggests inspections and confirmation, not chemical 
 ## Delivery
 
 See `CHANGELOG.md` and `TEST_REPORT.md`. Changes are local and have not been committed, pushed or deployed. Origin was empty; preserve these files through publication or normal version control. This environment cannot demonstrate new-task snapshot restoration.
+
+## Portable model paths
+
+The configured Windows folders are `D:\rocole_github_deploy\models\nutrient` and `D:\rocole_github_deploy\models\disease`. Local checkout `models/<task>` folders are preferred when present. `ROCOLE_NUTRIENT_DIR` and `ROCOLE_DISEASE_DIR` process variables override discovery. Existing Colab folders remain a fallback. This only configures locations; model files must exist on the actual machine running Streamlit. See [model placement](models/README.md).

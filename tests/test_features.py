@@ -113,3 +113,26 @@ def test_history_image_reports_and_camera(monkeypatch):
     a.sidebar.radio(key='nav_page').set_value('Analyze Leaf').run()
     a.radio(key='image_source').set_value('Camera').run()
     assert not a.exception and len(a.get('camera_input'))==1
+
+def test_portable_model_paths(tmp_path,monkeypatch):
+    from model_paths import model_directory
+    for task in ('nutrient','disease'):
+        monkeypatch.delenv('ROCOLE_'+task.upper()+'_DIR',raising=False)
+        folder=tmp_path/'models'/task
+        folder.mkdir(parents=True)
+        assert model_directory(task,tmp_path)==str(folder)
+        override=tmp_path/'mounted'/task
+        monkeypatch.setenv('ROCOLE_'+task.upper()+'_DIR',str(override))
+        assert model_directory(task,tmp_path)==str(override)
+    with pytest.raises(ValueError): model_directory('other',tmp_path)
+
+
+def test_exact_checkpoint_in_portable_root(tmp_path,monkeypatch):
+    import app
+    folder=tmp_path/'models'/'nutrient'
+    folder.mkdir(parents=True)
+    checkpoint=folder/'swin_best.pth'
+    checkpoint.write_bytes(b'path-resolution-fixture-not-model-weights')
+    monkeypatch.setitem(app.ROOTS,'Nutrient',[str(folder/'checkpoints'),str(folder)])
+    app.st.session_state.path_overrides={}
+    assert app.resolve_checkpoint('Nutrient','Swin Tiny')==str(checkpoint)
