@@ -35,3 +35,9 @@ Protected model functions/constants and Coffee AI prompt/request functions are A
 - `check_http`: safe, specific authentication/permission/model/quota error messages; recognizes invalid/expired API-key reasons without showing provider bodies.
 - `ask_ai`: live-checked default `gemini-3.5-flash-lite` backup; promptly switches on temporary errors, preserves an explicit backup override/disable, avoids retrying quota/auth errors. Missing credential instructions now identify Streamlit Secrets.
 - This intentionally updates request recovery. SYSTEM_PROMPT, `ai_exchange` payload/schema/language handling, model inference and mappings remain protected and unchanged.
+
+## Voice transcription reliability
+
+- `voice.transcribe`: canonical audio payload; distinct backup on request/model/temporary failures; no quota/auth retries; bounded requests and safe response parsing.
+- `voice._http_error`, `voice._transcript`, `voice.TranscriptionError`: safe diagnostic categories and malformed-response handling without provider-body disclosure.
+- `chat_page`: independent, audio-checked transcription default and configurable distinct fallback; existing inline review-before-send UX preserved.

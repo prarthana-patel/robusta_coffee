@@ -1461,7 +1461,10 @@ def chat_page():
             from voice import transcribe
             try:
                 with st.spinner("Transcribing your recording..."):
-                    transcript = transcribe(recording.getvalue(), recording.type, setting("GEMINI_API_KEY"), setting("GEMINI_TRANSCRIPTION_MODEL", setting("GEMINI_MODEL", "gemini-3.1-flash-lite")))
+                    transcription_model = setting("GEMINI_TRANSCRIPTION_MODEL", "gemini-3.5-flash-lite")
+                    default_backup = "gemini-3.1-flash-lite" if transcription_model.removeprefix("models/") == "gemini-3.5-flash-lite" else "gemini-3.5-flash-lite"
+                    transcript = transcribe(recording.getvalue(), recording.type, setting("GEMINI_API_KEY"), transcription_model,
+                                            setting("GEMINI_TRANSCRIPTION_BACKUP_MODEL", default_backup))
                 st.session_state.pending_voice_draft = "\n".join(part for part in (text.strip(), transcript) if part)[:2000]
                 st.rerun()
             except ValueError as exc:

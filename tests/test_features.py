@@ -84,7 +84,7 @@ def test_voice_transcription_mock_and_failure():
         assert post.call_args.kwargs['follow_redirects'] is False
     with pytest.raises(ValueError): transcribe(b'a','audio/wav','','gemini-test')
     response.status_code=403
-    with patch('voice.httpx.post',return_value=response),pytest.raises(ValueError,match='rejected'):
+    with patch('voice.httpx.post',return_value=response),pytest.raises(ValueError,match='denied'):
         transcribe(b'a','audio/wav','not-real','gemini-test')
 
 def test_gradcam_synthetic_only():
@@ -230,3 +230,26 @@ def test_ai_fallback_and_no_quota_retry(monkeypatch):
     with patch.object(app,'ai_exchange',exchange):
         answer,error,_=app.ask_ai('What is coffee?','English')
     assert answer is None and error=='Quota reached' and exchange.await_count==1
+
+def test_voice_fallback_uses_canonical_audio_payload():
+    import httpx
+    from voice import transcribe
+    unavailable=httpx.Response(400,json={'error':{'status':'INVALID_ARGUMENT'}})
+    success=httpx.Response(200,json={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':'What is coffee?'}]}}]})
+    with patch('voice.httpx.post',side_effect=[unavailable,success]) as post:
+        assert transcribe(b'fixture','audio/wav','fake','gemini-primary','gemini-backup')=='What is coffee?'
+        assert post.call_count==2
+        assert '/gemini-backup:' in post.call_args.args[0]
+        data=post.call_args.kwargs['json']['contents'][0]['parts'][1]['inlineData']
+        assert data['mimeType']=='audio/wav'
+
+
+def test_voice_quota_auth_and_invalid_response_no_retry():
+    import httpx
+    from voice import transcribe
+    for code,payload,message in [(429,{},'quota'),(403,{},'denied'),(400,{'error':{'details':[{'reason':'API_KEY_INVALID'}]}},'authentication')]:
+        with patch('voice.httpx.post',return_value=httpx.Response(code,json=payload)) as post:
+            with pytest.raises(ValueError,match=message):transcribe(b'fixture','audio/wav','fake','gemini-primary','gemini-backup')
+            assert post.call_count==1
+    with patch('voice.httpx.post',return_value=httpx.Response(200,content=b'not-json')):
+        with pytest.raises(ValueError,match='invalid response'):transcribe(b'fixture','audio/wav','fake','gemini-primary')
