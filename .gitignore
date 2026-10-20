@@ -1,0 +1,7 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+.streamlit/secrets.toml
+*.sqlite
+*.sqlite-*
+.venv/
