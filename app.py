@@ -74,7 +74,7 @@ NUTRIENT_CLASSES = ["Healthy", "Boron (B) Deficiency", "Calcium (Ca) Deficiency"
                    "Manganese (Mn) Deficiency", "Nitrogen (N) Deficiency",
                    "Phosphorus (P) Deficiency", "Potassium (K) Deficiency"]
 CLASSES = {"Disease": DISEASE_CLASSES, "Nutrient": NUTRIENT_CLASSES}
-PAGES = ["Home", "Analyze Leaf", "Coffee AI", "History", "Settings", "Account", "SYSTEM"]
+PAGES = ["Home", "Analyze Leaf", "Coffee AI", "History", "Settings"]
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta"
 AI_DEADLINE = None  # no artificial total response timer
 SYSTEM_PROMPT = """You are RoCoLe, a friendly, knowledgeable coffee assistant.
@@ -1055,7 +1055,7 @@ def render_result(result, key):
     for p in result["predictions"]:
         st.write(f'**{p["model"]}** · {p["label"]} · {p["confidence"]:.1f}%')
         if p["class_source"].startswith("UNVERIFIED"):
-            st.warning(f'{p["model"]}: label order is inherited from the original app and needs training verification. Supply classes.json in SYSTEM.')
+            st.warning(f'{p["model"]}: label order is inherited from the original app and needs training verification. Ask the operator to provide the verified training classes.json.')
     with st.expander("FARMER MODE", expanded=True):
         st.write(f'The models predicted **{result["label"]}**. This is not a confirmed agricultural diagnosis.')
         st.write("Inspect several leaves and both leaf surfaces, note whether symptoms affect old or new growth, "
@@ -1373,6 +1373,12 @@ def scan_page():
 
 # ========================= COFFEE AI PAGE =========================
 def chat_page():
+    markup("""<style>
+    [data-testid="stChatInput"]{background:var(--surface)!important;border:1px solid var(--line)!important;border-radius:28px!important}
+    [data-testid="stChatInput"] textarea{background:transparent!important;color:var(--text)!important;caret-color:var(--text)!important}
+    [data-testid="stChatInput"] textarea::placeholder{color:var(--muted)!important;opacity:1!important}
+    [data-testid="stChatInput"] button{color:var(--text)!important}
+    </style>""")
     page_heading("ROCOLE // COFFEE AI", "ASK<br><em>ROCOLE.</em>")
     st.write("Coffee knowledge without the language barrier.")
     diag = st.session_state.ai_diagnostic
@@ -1403,23 +1409,29 @@ def chat_page():
                 st.warning(msg["text"])
             else:
                 st.markdown(msg["text"])
-    voice_question = None
-    with st.expander("VOICE QUESTION"):
-        st.caption("Optional: your recording is sent to Gemini only when you choose Transcribe. Review the transcript before sending it to Coffee AI.")
-        recording = st.audio_input("Record a coffee question", key="voice_recording")
-        if recording and st.button("Transcribe recording", disabled=not setting("GEMINI_API_KEY")):
+    if "pending_voice_draft" in st.session_state:
+        st.session_state.coffee_composer = st.session_state.pop("pending_voice_draft")
+    retry = st.session_state.pending_question and st.button("RETRY LAST QUESTION")
+    st.caption("Use the microphone in the message box to record. Submitting a recording sends it to Gemini for transcription; review the text here before sending your question.")
+    submitted = st.chat_input("ASK ROCOLE ANYTHING ABOUT COFFEE...", key="coffee_composer", accept_audio=True,
+                              audio_sample_rate=16000, max_upload_size=8,
+                              disabled=not setting("GEMINI_API_KEY"), max_chars=2000)
+    typed = None
+    if submitted:
+        recording = getattr(submitted, "audio", None)
+        text = submitted if isinstance(submitted, str) else submitted.text
+        if recording:
             from voice import transcribe
             try:
-                with st.spinner("Transcribing..."):
-                    st.session_state.voice_draft = transcribe(recording.getvalue(), recording.type, setting("GEMINI_API_KEY"), setting("GEMINI_TRANSCRIPTION_MODEL", setting("GEMINI_MODEL", "gemini-3.1-flash-lite")))
+                with st.spinner("Transcribing your recording..."):
+                    transcript = transcribe(recording.getvalue(), recording.type, setting("GEMINI_API_KEY"), setting("GEMINI_TRANSCRIPTION_MODEL", setting("GEMINI_MODEL", "gemini-3.1-flash-lite")))
+                st.session_state.pending_voice_draft = "\n".join(part for part in (text.strip(), transcript) if part)[:2000]
+                st.rerun()
             except ValueError as exc:
                 st.warning(str(exc))
-        draft = st.text_area("Review or edit transcript", key="voice_draft", max_chars=2000)
-        if st.button("Send reviewed transcript", disabled=not (draft.strip() and setting("GEMINI_API_KEY"))):
-            voice_question = draft.strip()
-    retry = st.session_state.pending_question and st.button("RETRY LAST QUESTION")
-    typed = st.chat_input("ASK ROCOLE ANYTHING ABOUT COFFEE...", disabled=not setting("GEMINI_API_KEY"), max_chars=2000)
-    question = typed or voice_question or prompt_from_chip or (st.session_state.pending_question if retry else None)
+        else:
+            typed = text.strip()
+    question = typed or prompt_from_chip or (st.session_state.pending_question if retry else None)
     if question:
         st.session_state.pending_question = question
         if not retry:
@@ -1449,46 +1461,6 @@ def current_owner():
     return account_id(issuer, subject) if issuer and subject else None
 
 
-def account_page():
-    page_heading("FARMER ACCOUNT", "YOUR <em>FARM.</em>")
-    if not st.user.get("is_logged_in", False):
-        st.write("Sign in to save your profile, farm records and scans across sessions.")
-        try:
-            configured = bool(st.secrets.get("auth", {}).get("server_metadata_url"))
-        except (FileNotFoundError, st.errors.StreamlitSecretNotFoundError):
-            configured = False
-        if st.button("Sign in", disabled=not configured):
-            st.login()
-        if not configured:
-            st.info("Account sign-in is not configured by the operator yet.")
-        return
-    if st.button("Sign out"):
-        st.session_state.clear()
-        st.logout()
-        return
-    owner = current_owner()
-    if not owner:
-        st.error("Identity provider must supply verified issuer and subject claims.")
-        return
-    if not setting("ROCOLE_DB_PATH"):
-        st.info("Account storage is not configured yet.")
-        return
-    try:
-        store = Store(setting("ROCOLE_DB_PATH"))
-        profile = store.profile(owner)
-        with st.form("farm_profile"):
-            name = st.text_input("Display name", profile.get("name", ""), max_chars=200)
-            farm = st.text_input("Farm name", profile.get("farm", ""), max_chars=200)
-            region = st.text_input("Region", profile.get("region", ""), max_chars=200)
-            variety = st.text_input("Coffee variety", profile.get("variety", ""), max_chars=200)
-            notes = st.text_area("Farm notes", profile.get("notes", ""), max_chars=5000)
-            if st.form_submit_button("Save profile and farm details"):
-                store.save_profile(owner, dict(name=name, farm=farm, region=region, variety=variety, notes=notes))
-                st.success("Profile saved.")
-    except (OSError, sqlite3.Error, ValueError):
-        st.error("Account storage is unavailable. Contact the operator.")
-
-
 def archive_page():
     page_heading("SCAN HISTORY", "RESEARCH <em>RECORDS.</em>")
     owner = current_owner()
@@ -1504,7 +1476,7 @@ def archive_page():
             st.warning("Account history is unavailable; showing this session's scans.")
             store = None
     else:
-        st.caption("Session-only history. Sign in to save future scans across sessions.")
+        st.caption("Records and images are kept in this session only.")
     if not records:
         st.info("No saved scans on this page.")
     for identifier, result in records:
@@ -1531,80 +1503,6 @@ def archive_page():
 
 
 # ========================= SYSTEM =========================
-def system_page():
-    page_heading("SYSTEM / RUNTIME & DIAGNOSTICS", "UNDER THE <em>HOOD.</em>")
-    st.caption("A found checkpoint is not marked READY until its state dictionary loads successfully.")
-    if st.button("REFRESH CHECKPOINT INDEX / CLEAR MODEL CACHE"):
-        checkpoint_candidates.clear()
-        load_model_checked.clear()
-        st.session_state.model_diagnostics = []
-    for task in ROOTS:
-        with st.expander(task.upper() + " / CHECKPOINT CONFIGURATION", expanded=True):
-            st.code("\n".join(ROOTS[task]), language=None)
-            found = checkpoint_candidates(task)
-            for name in MODEL_ARCHS:
-                slot = task + "/" + name
-                st.write(f"**{name}** · {MODEL_ARCHS[name]}")
-                intended = EXACT_CHECKPOINTS[task][name]
-                try:
-                    resolved_now = resolve_checkpoint(task, name)
-                    st.caption(f"INTENDED / {intended}\n\nRESOLVED / {resolved_now}")
-                except Exception as exc:
-                    st.caption(f"INTENDED / {intended}\n\nNOT RESOLVED / {safe_detail(exc)}")
-                options = ["Use intended trained checkpoint"] + found[name]
-                current = st.session_state.path_overrides.get(slot)
-                if current and current not in options:
-                    options.append(current)
-                selected = st.selectbox("Checkpoint", options, index=options.index(current) if current in options else 0,
-                                        key="path_" + slot)
-                if selected != options[0]:
-                    st.session_state.path_overrides[slot] = selected
-                else:
-                    st.session_state.path_overrides.pop(slot, None)
-                mapping = st.text_input("Optional training class mapping JSON path", value=st.session_state.mapping_overrides.get(slot, ""), key="map_" + slot)
-                st.session_state.mapping_overrides[slot] = mapping.strip()
-                st.caption(f"CHECKPOINTS FOUND: {len(found[name])}" if found[name] else "OFFLINE / No matching checkpoint in the configured roots")
-    st.subheader("MODEL STATUS / LAST SCAN")
-    for record in st.session_state.model_diagnostics:
-        with st.expander(f'{record["task"]} / {record["model"]} / {record["state"]}'):
-            st.json(record)
-    if not st.session_state.model_diagnostics:
-        st.caption("NOT TESTED / Run a neural scan to validate real checkpoint compatibility.")
-    if st.button("CHECK ML RUNTIME"):
-        try:
-            torch, timm, _ = ml_runtime()
-            st.session_state.runtime_status = {"torch": torch.__version__, "timm": timm.__version__,
-                                               "device": "cuda" if torch.cuda.is_available() else "cpu"}
-        except Exception as exc:
-            st.session_state.runtime_status = {"status": "ERROR", "cause": safe_detail(f"{type(exc).__name__}: {exc}")}
-    st.json(st.session_state.get("runtime_status", {"status": "NOT TESTED"}))
-    st.subheader("COFFEE AI / CONNECTION")
-    st.write("Credential configured:", bool(setting("GEMINI_API_KEY")))
-    st.json(st.session_state.ai_diagnostic or {"status": "NOT TESTED"})
-    if st.button("REFRESH AVAILABLE GEMINI MODELS", disabled=not setting("GEMINI_API_KEY")):
-        async def refresh():
-            async with httpx.AsyncClient(timeout=httpx.Timeout(4, connect=2)) as client:
-                return await asyncio.wait_for(discover_models(client, setting("GEMINI_API_KEY")), 6)
-        try:
-            st.session_state.provider_models = asyncio.run(refresh())
-            st.session_state.key_fingerprint = hashlib.sha256(setting("GEMINI_API_KEY").encode()).hexdigest()
-            st.success("Model catalogue loaded. Generation has not yet been tested.")
-        except AIError as exc:
-            st.warning(str(exc))
-        except ImportError:
-            st.warning("Install httpx[socks] in the runtime and restart the app.")
-        except (httpx.RequestError, ValueError, asyncio.TimeoutError):
-            st.warning("Could not retrieve the catalogue. Check connectivity and provider status.")
-    if st.session_state.provider_models:
-        options = ["Server-configured default"] + [m["name"] for m in st.session_state.provider_models]
-        old = st.session_state.get("preferred_model")
-        choice = st.selectbox("Model listed by Gemini", options, index=options.index(old) if old in options else 0)
-        st.session_state.preferred_model = "" if choice == options[0] else choice
-    with st.expander("DEPLOYMENT SETUP / NO KEY ENTRY ON THE PUBLIC PAGE"):
-        st.write("Set GEMINI_API_KEY in the process environment before starting Streamlit, or use .streamlit/secrets.toml:")
-        st.code('GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"\n# Optional: GEMINI_MODEL = "MODEL_FROM_THE_LIST"', language="toml")
-        st.caption("Normal requests use the configured model without a catalogue lookup. Temporary HTTP 500/502/503/504 errors, timeouts and connection failures retry once after 0.9 seconds, then try one configured backup if set. A 404 skips directly to that backup. Each attempt is capped at 26 seconds.")
-
 # ========================= NAVIGATION =========================
 def main():
     st.set_page_config(page_title="RoCoLe — Coffee Leaf Intelligence", page_icon="🌿", layout="wide", initial_sidebar_state="auto")
@@ -1627,15 +1525,15 @@ def main():
         .stButton button,.stDownloadButton button,div[data-baseweb="select"]>div,div[data-baseweb="input"]>div,.stTextArea textarea{background:#fffdf7!important;color:#17241c!important}
         </style>""")
     t=UI_TEXT[st.session_state.ui_language]
-    labels=[t["home"],t["analyze"],t["ai"],t["history"],t["settings"],"Account","SYSTEM"]
+    labels=[t["home"],t["analyze"],t["ai"],t["history"],t["settings"]]
     with st.sidebar:
         markup('<div class="brand">RoCoLe</div><div class="brand-sub">Coffee Leaf Intelligence</div>')
-        if "nav_page" not in st.session_state:
-            st.session_state.nav_page = st.session_state.lab_page
+        if st.session_state.get("nav_page") not in PAGES:
+            st.session_state.nav_page = st.session_state.lab_page if st.session_state.lab_page in PAGES else PAGES[0]
         chosen = st.radio("Navigation", PAGES, format_func=lambda value: labels[PAGES.index(value)], key="nav_page", label_visibility="collapsed")
         st.session_state.lab_page = chosen
         markup('<div class="strip">ROBUSTA COFFEE · MULTI-MODEL AI</div>')
-    {PAGES[0]:home_page,PAGES[1]:scan_page,PAGES[2]:chat_page,PAGES[3]:archive_page,PAGES[4]:settings_page,PAGES[5]:account_page,PAGES[6]:system_page}[st.session_state.lab_page]()
+    {PAGES[0]:home_page,PAGES[1]:scan_page,PAGES[2]:chat_page,PAGES[3]:archive_page,PAGES[4]:settings_page}[st.session_state.lab_page]()
     markup('<div class="strip">RoCoLe · Coffee Leaf Intelligence · Verify AI predictions before treatment</div>')
 
 if __name__ == "__main__":

@@ -39,7 +39,7 @@ def test_pdf_and_uncertainty():
 def test_navigation_and_theme(monkeypatch):
     monkeypatch.setenv("MARKET_API_KEY", "")
     a=AppTest.from_file(str(ROOT/'app.py'),default_timeout=30).run()
-    for page in ['Analyze Leaf','Coffee AI','History','Settings','Account','SYSTEM','Home','Settings']:
+    for page in ['Analyze Leaf','Coffee AI','History','Settings','Home','Settings']:
         a.sidebar.radio(key='nav_page').set_value(page).run()
         assert not a.exception, [e.message for e in a.exception]
         assert a.session_state['lab_page']==page
@@ -136,3 +136,35 @@ def test_exact_checkpoint_in_portable_root(tmp_path,monkeypatch):
     monkeypatch.setitem(app.ROOTS,'Nutrient',[str(folder/'checkpoints'),str(folder)])
     app.st.session_state.path_overrides={}
     assert app.resolve_checkpoint('Nutrient','Swin Tiny')==str(checkpoint)
+
+def test_removed_pages_and_inline_microphone(monkeypatch):
+    monkeypatch.setenv('MARKET_API_KEY','')
+    monkeypatch.setenv('GEMINI_API_KEY','test-not-a-real-key')
+    a=AppTest.from_file(str(ROOT/'app.py'),default_timeout=30).run()
+    assert a.sidebar.radio(key='nav_page').options==['Home','Analyze Leaf','Coffee AI','History','Settings']
+    a=AppTest.from_file(str(ROOT/'app.py'),default_timeout=30)
+    a.session_state['nav_page']='SYSTEM'
+    a.session_state['lab_page']='SYSTEM'
+    a.run()
+    assert not a.exception and a.session_state['lab_page']=='Home'
+    a.sidebar.radio(key='nav_page').set_value('Coffee AI').run()
+    assert not a.exception
+    assert a.chat_input[0].proto.accept_audio
+    assert len(a.get('audio_input'))==0
+    assert all(e.label!='VOICE QUESTION' for e in a.expander)
+
+
+def test_inline_recording_becomes_review_draft(monkeypatch):
+    from streamlit.elements.widgets.chat import ChatInputValue
+    monkeypatch.setenv('MARKET_API_KEY','')
+    monkeypatch.setenv('GEMINI_API_KEY','test-not-a-real-key')
+    audio=MagicMock(type='audio/wav')
+    audio.getvalue.return_value=b'synthetic-audio'
+    submitted=ChatInputValue(text='',audio=audio,_include_audio=True)
+    a=AppTest.from_file(str(ROOT/'app.py'),default_timeout=30).run()
+    with patch('streamlit.chat_input',side_effect=[submitted,None]),patch('voice.transcribe',return_value='What is Robusta?') as transcribe:
+        a.sidebar.radio(key='nav_page').set_value('Coffee AI').run()
+        assert not a.exception, [e.message for e in a.exception]
+        transcribe.assert_called_once()
+        assert a.session_state['coffee_composer']=='What is Robusta?'
+        assert a.session_state['ai_display']==[]

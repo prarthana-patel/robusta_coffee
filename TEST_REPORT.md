@@ -2,11 +2,11 @@
 
 Current run: Python 3.12, Streamlit 1.66.0, torch 2.14.1+cpu, timm 1.0.30.
 
-`/workspace/rocole-venv/bin/python -m pytest -q tests`: **10 passed**.
+`/workspace/rocole-venv/bin/python -m pytest -q tests`: **12 passed**.
 
 - SQLite account isolation: another owner cannot read profiles, list scans, retrieve images or delete records. Reopened database retains the owner's result and PNG. Owner deletion succeeds.
 - PDF generation from synthetic scan/image: valid PDF structure; probability indicators and invalid/non-finite input rejection checked.
-- Repeated navigation through all seven pages and switching to light theme: no application exceptions, selected page remains stable. This is a Streamlit AppTest check, not visual/browser verification.
+- Repeated navigation through all five visible pages and switching to light theme: no application exceptions, selected page remains stable. This is a Streamlit AppTest check, not visual/browser verification.
 - Protected original model functions/constants and Coffee AI prompt/request functions: AST comparison against the retained upload passes.
 - Feedback: configured SQLite storage and mocked SMTP both attempted; STARTTLS and send invoked; safe authentication failure status checked while preserving successful storage.
 - Voice: mocked Gemini response transcription, missing credential and provider rejection checked. No real recording or live transcription request validated.
@@ -23,3 +23,5 @@ Not run / externally blocked: actual OIDC login and logout with a provider, auth
 No Git push or deployment performed. Environment setup/startup instructions were updated in the draft; publication and new-task restoration remain unverified.
 
 Portable path update: two additional tests verify nutrient/disease directory discovery and process overrides, invalid task rejection, and exact checkpoint filename resolution from a portable task folder. The path fixture is not model weights; no inference validation is claimed.
+
+Composer/navigation update: two added tests verify the exact five navigation choices, recovery from a stale SYSTEM selection, native chat-input microphone enabled, absence of the old voice expander/audio widget, and mocked transcription returning a review draft without sending a Coffee AI question. Actual browser microphone permission/capture remains untested.

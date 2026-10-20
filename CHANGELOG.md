@@ -17,3 +17,9 @@
 Protected model functions/constants and Coffee AI prompt/request functions are AST-identical to the original upload; verified by regression test. Added modules, requirements, example secrets, setup guide and tests. No model checkpoint, calibration, severity model or research metrics were fabricated.
 
 - `model_paths.model_directory`: server-side per-task process overrides, portable checkout folders, supplied Windows folders, and existing Colab fallback. Original checkpoint filenames, loading checks and classifier behavior remain unchanged.
+
+## Chat composer simplification
+
+- Removed Account and SYSTEM navigation and page functions; resets stale navigation selections to Home.
+- `chat_page`: native inline microphone via `st.chat_input(accept_audio=True)`; removed separate VOICE QUESTION expander, recording widget and transcript form. Recorded audio is transcribed into the composer for review before sending. Typed questions use the same protected Coffee AI functions.
+- Composer text/background colors follow the selected theme. History no longer directs anonymous users to a removed sign-in page.
