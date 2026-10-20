@@ -2,7 +2,7 @@
 
 Current run: Python 3.12, Streamlit 1.66.0, torch 2.14.1+cpu, timm 1.0.30.
 
-`/workspace/rocole-venv/bin/python -m pytest -q tests`: **14 passed**.
+`/workspace/rocole-venv/bin/python -m pytest -q tests`: **16 passed**.
 
 - SQLite account isolation: another owner cannot read profiles, list scans, retrieve images or delete records. Reopened database retains the owner's result and PNG. Owner deletion succeeds.
 - PDF generation from synthetic scan/image: valid PDF structure; probability indicators and invalid/non-finite input rejection checked.
@@ -27,3 +27,5 @@ Portable path update: two additional tests verify nutrient/disease directory dis
 Composer/navigation update: two added tests verify the exact five navigation choices, recovery from a stale SYSTEM selection, native chat-input microphone enabled, absence of the old voice expander/audio widget, and mocked transcription returning a review draft without sending a Coffee AI question. Actual browser microphone permission/capture remains untested.
 
 Automatic checkpoint fetch: two tests verify exact-name selection, refusal of missing/duplicate matches, mocked artifact download with verified TLS, temporary-file cleanup, hash recording and repeatability without re-downloading existing files. Live Drive folder/download access failed with proxy HTTP 403; no real checkpoint was acquired or run. These tests do not establish actual folder contents, original-file equivalence or trained-model accuracy.
+
+Coffee AI reliability validation: live models-list request succeeded. Live `ai_exchange` generation succeeded for primary gemini-3.1-flash-lite (Kanglish question) and backup gemini-3.5-flash-lite (English question). A tested older model gemini-2.5-flash-lite returned 404 and was not chosen as backup. These calls used the existing development credential, not a verified deployment connection. Added regression checks for specific safe HTTP errors, invalid-key classification, primary-503-to-backup recovery, and avoiding quota retry. The original SYSTEM_PROMPT and ai_exchange request/JSON/language handling still pass AST comparison; ask_ai recovery intentionally changed. Browser/device and deployed-provider checks remain outstanding.

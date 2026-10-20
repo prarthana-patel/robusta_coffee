@@ -29,3 +29,9 @@ Protected model functions/constants and Coffee AI prompt/request functions are A
 - `checkpoint_download.download_checkpoints`: download only the eight explicit filenames from the supplied Drive folder, preserve existing files, reject missing/duplicate matches, use verified TLS, atomic writes and a process lock, record acquired hashes, and fetch unambiguous class JSON sidecars. No trained files are bundled.
 - `scan_page`: attempt automatic retrieval of the selected task's missing models before running the original inference function. No download button.
 - Added gdown and pinned its dependencies. API keys remain server-side configuration.
+
+## Coffee AI provider recovery
+
+- `check_http`: safe, specific authentication/permission/model/quota error messages; recognizes invalid/expired API-key reasons without showing provider bodies.
+- `ask_ai`: live-checked default `gemini-3.5-flash-lite` backup; promptly switches on temporary errors, preserves an explicit backup override/disable, avoids retrying quota/auth errors. Missing credential instructions now identify Streamlit Secrets.
+- This intentionally updates request recovery. SYSTEM_PROMPT, `ai_exchange` payload/schema/language handling, model inference and mappings remain protected and unchanged.

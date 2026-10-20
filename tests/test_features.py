@@ -51,7 +51,7 @@ def test_original_model_and_ai_unchanged():
     original=Path('/workspace/attachments/d40de163-491e-488b-b8ea-4370beeb7661/app.py')
     if not original.exists(): pytest.skip('Original upload unavailable')
     old=ast.parse(original.read_text());new=ast.parse((ROOT/'app.py').read_text())
-    protected=['ml_runtime','checkpoint_candidates','resolve_checkpoint','extract_state_dict','align_state_dict','metadata_classes','canonical_class','parse_classes','load_model_checked','run_scan','build_contents','ask_ai','ai_exchange']
+    protected=['ml_runtime','checkpoint_candidates','resolve_checkpoint','extract_state_dict','align_state_dict','metadata_classes','canonical_class','parse_classes','load_model_checked','run_scan','build_contents','ai_exchange']
     for name in protected:
         before=next(n for n in old.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name==name)
         after=next(n for n in new.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name==name)
@@ -194,3 +194,39 @@ def test_drive_download_atomic_and_repeatable(tmp_path,monkeypatch):
     assert cd.download_checkpoints(['nutrient'])==[]
     assert len(list((tmp_path/'nutrient').glob('*.pth.sha256')))==4
     assert not list(tmp_path.rglob('*.download'))
+
+def test_ai_error_messages_are_specific_and_safe():
+    import httpx
+    from app import check_http, AIError
+    for code, category in [(401,'AUTHENTICATION'),(403,'PERMISSION'),(404,'MODEL_UNAVAILABLE'),(429,'QUOTA'),(503,'PROVIDER')]:
+        with pytest.raises(AIError) as caught:
+            check_http(httpx.Response(code,json={'error':{'message':'private-provider-detail'}}))
+        assert caught.value.category==category
+        assert 'private-provider-detail' not in str(caught.value)
+    with pytest.raises(AIError) as caught:
+        check_http(httpx.Response(400,json={'error':{'details':[{'reason':'API_KEY_INVALID'}]}}))
+    assert caught.value.category=='AUTHENTICATION'
+    assert 'invalid or expired' in str(caught.value)
+
+
+def test_ai_fallback_and_no_quota_retry(monkeypatch):
+    import app
+    from unittest.mock import AsyncMock
+    monkeypatch.setenv('GEMINI_API_KEY','test-key')
+    monkeypatch.setenv('GEMINI_MODEL','gemini-3.1-flash-lite')
+    monkeypatch.delenv('GEMINI_BACKUP_MODEL',raising=False)
+    app.initialize_state()
+    app.st.session_state.ai_turns=[]
+    app.st.session_state.analysis_result=None
+    app.st.session_state.preferred_model=''
+    exchange=AsyncMock(side_effect=[app.AIError('PROVIDER','temporary',503),('Coffee answer',{},'models/gemini-3.5-flash-lite',[],False)])
+    with patch.object(app,'ai_exchange',exchange):
+        answer,error,_=app.ask_ai('What is coffee?','English')
+    assert answer=='Coffee answer' and error is None
+    assert exchange.await_count==2
+    assert [call.args[2] for call in exchange.await_args_list]==['gemini-3.1-flash-lite','gemini-3.5-flash-lite']
+    assert app.st.session_state.ai_diagnostic['status']=='ONLINE'
+    exchange=AsyncMock(side_effect=app.AIError('QUOTA','Quota reached',429))
+    with patch.object(app,'ai_exchange',exchange):
+        answer,error,_=app.ask_ai('What is coffee?','English')
+    assert answer is None and error=='Quota reached' and exchange.await_count==1

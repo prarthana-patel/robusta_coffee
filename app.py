@@ -465,8 +465,22 @@ def check_http(response):
     code = response.status_code
     category = {400: "INVALID_REQUEST", 401: "AUTHENTICATION", 403: "PERMISSION",
                 404: "MODEL_UNAVAILABLE", 429: "QUOTA"}.get(code, "PROVIDER")
-    message = "Coffee AI is temporarily unavailable. Please try again later."
-    raise AIError(category, message, code)
+    messages = {
+        400: "Coffee AI rejected the request. Check that the configured key and model support Gemini text generation.",
+        401: "Coffee AI could not authenticate. The operator needs to update GEMINI_API_KEY in Streamlit Secrets.",
+        403: "Coffee AI access was denied. Check the key's API permissions and project restrictions.",
+        404: "The configured Coffee AI model is unavailable for this key. Check GEMINI_MODEL in Streamlit Secrets.",
+        429: "Coffee AI quota or rate limit reached. Wait before retrying; the operator may need to check the Gemini project's quota and billing.",
+    }
+    if code == 400:
+        try:
+            details = response.json().get("error", {}).get("details", [])
+            if any(isinstance(item, dict) and item.get("reason") in ("API_KEY_INVALID", "API_KEY_EXPIRED") for item in details):
+                category = "AUTHENTICATION"
+                messages[400] = "The Coffee AI API key is invalid or expired. Update GEMINI_API_KEY in Streamlit Secrets."
+        except (ValueError, AttributeError, TypeError):
+            pass
+    raise AIError(category, messages.get(code, "The Coffee AI provider is temporarily unavailable. Please try again shortly."), code)
 
 async def discover_models(client, key):
     models, token = [], None
@@ -576,7 +590,7 @@ def ask_ai(question, language):
             "last_request": datetime.now(timezone.utc).isoformat(), "attempts": []}
     key = setting("GEMINI_API_KEY")
     primary = st.session_state.get("preferred_model") or setting("GEMINI_MODEL", "gemini-3.1-flash-lite")
-    backup = setting("GEMINI_BACKUP_MODEL", "")
+    backup = setting("GEMINI_BACKUP_MODEL", "gemini-3.5-flash-lite")
     primary = primary.removeprefix("models/")
     backup = backup.removeprefix("models/")
 
@@ -589,8 +603,8 @@ def ask_ai(question, language):
         )
 
     async def request_with_recovery():
-        # Two primary attempts for transient errors, then at most ONE configured backup.
-        # No guessed backup default: only the primary has passed the user's live test.
+        # The default backup was checked with a real generation request.
+        # An explicit empty GEMINI_BACKUP_MODEL disables fallback.
         transient = (500, 502, 503, 504)
         last_error = None
         attempt = 0
@@ -617,7 +631,9 @@ def ask_ai(question, language):
                                attempt, model if re.fullmatch(r"(?:models/)?gemini-[a-zA-Z0-9._-]+", model) else "INVALID_CONFIG",
                                last_error.category, last_error.status)
                 if last_error.status == 404:
-                    # Retrying an unavailable model cannot help; go directly to backup.
+                    break
+                if model_index == 0 and len(configured) > 1 and (last_error.status in transient or last_error.category in ("TIMEOUT", "NETWORK")):
+                    # Try the available backup promptly instead of repeating a failing primary.
                     break
                 if last_error.status not in transient and last_error.category not in ("TIMEOUT", "NETWORK"):
                     raise last_error
@@ -625,7 +641,7 @@ def ask_ai(question, language):
 
     try:
         if not key:
-            raise AIError("NOT_CONFIGURED", "Coffee AI is temporarily unavailable. Please try again later.")
+            raise AIError("NOT_CONFIGURED", "Coffee AI is not configured. Add GEMINI_API_KEY once in the deployed app’s Streamlit Secrets.")
 
         answer, content, used_model, _, truncated = asyncio.run(request_with_recovery())
         st.session_state.ai_turns.append({"question": question, "answer": answer,
@@ -638,7 +654,7 @@ def ask_ai(question, language):
     except AIError as exc:
         diag.update(cause=exc.category, http=exc.status)
         if exc.status in (500, 502, 503, 504):
-            return None, "Coffee AI is busy right now. Please try again in a moment.", False
+            return None, "The Coffee AI provider is temporarily unavailable after retrying. Please try again shortly.", False
         return None, str(exc), False
     except (httpx.ConnectTimeout, httpx.ReadTimeout, asyncio.TimeoutError, TimeoutError):
         diag["cause"] = "TIMEOUT"

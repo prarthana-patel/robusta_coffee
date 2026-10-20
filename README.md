@@ -52,3 +52,9 @@ When RUN NEURAL SCAN detects missing checkpoint files for the selected task, it 
 `python checkpoint_download.py` can prefetch all eight files during operator setup. It is not automatically executed by merely pushing this repository. This development environment's proxy returned 403 for live Drive access; no actual model download or inference has been verified here.
 
 The app reads GEMINI_API_KEY from Streamlit Secrets or process configuration. Set it once in the deployed Streamlit app's Secrets settings. The developer environment's secret bindings are separate from Streamlit Cloud; API credentials are never committed into application source.
+
+## Coffee AI reliability update
+
+The primary remains `gemini-3.1-flash-lite`. The default backup is `gemini-3.5-flash-lite`; both produced valid live text responses during this update using the development environment's existing credential. This does not establish the deployed Streamlit app's key, quota or network status. `GEMINI_BACKUP_MODEL` overrides the backup; an explicit empty value disables it.
+
+Temporary provider errors, timeouts and connection failures switch to the backup after the first failed primary attempt. Without a distinct backup, a transient primary failure is retried once. Invalid-key, permission and quota errors return specific safe messages without retrying or exposing provider response bodies. Prompts, language checks, scan context and JSON response schema are unchanged. An existing explicit GEMINI_MODEL or GEMINI_BACKUP_MODEL setting is preserved; remove an unwanted override in Streamlit Secrets to use these defaults.
