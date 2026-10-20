@@ -5,3 +5,11 @@ __pycache__/
 *.sqlite
 *.sqlite-*
 .venv/
+
+# Large trained artifacts are downloaded at runtime, never committed.
+models/**/*.pth
+models/**/*.pt
+models/**/*.ckpt
+models/**/*.download
+models/**/*.sha256
+models/.download.lock

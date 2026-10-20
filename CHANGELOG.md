@@ -23,3 +23,9 @@ Protected model functions/constants and Coffee AI prompt/request functions are A
 - Removed Account and SYSTEM navigation and page functions; resets stale navigation selections to Home.
 - `chat_page`: native inline microphone via `st.chat_input(accept_audio=True)`; removed separate VOICE QUESTION expander, recording widget and transcript form. Recorded audio is transcribed into the composer for review before sending. Typed questions use the same protected Coffee AI functions.
 - Composer text/background colors follow the selected theme. History no longer directs anonymous users to a removed sign-in page.
+
+## Automatic checkpoint retrieval
+
+- `checkpoint_download.download_checkpoints`: download only the eight explicit filenames from the supplied Drive folder, preserve existing files, reject missing/duplicate matches, use verified TLS, atomic writes and a process lock, record acquired hashes, and fetch unambiguous class JSON sidecars. No trained files are bundled.
+- `scan_page`: attempt automatic retrieval of the selected task's missing models before running the original inference function. No download button.
+- Added gdown and pinned its dependencies. API keys remain server-side configuration.

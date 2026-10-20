@@ -168,3 +168,29 @@ def test_inline_recording_becomes_review_draft(monkeypatch):
         transcribe.assert_called_once()
         assert a.session_state['coffee_composer']=='What is Robusta?'
         assert a.session_state['ai_display']==[]
+
+def test_drive_selection_rejects_missing_and_ambiguous_files():
+    from types import SimpleNamespace
+    from checkpoint_download import select_files, EXPECTED
+    files=[SimpleNamespace(path='nutrient/'+name,id=str(i)) for i,name in enumerate(EXPECTED['nutrient'])]
+    assert len(select_files(files,['nutrient']))==4
+    with pytest.raises(ValueError,match='found 0'):select_files(files[:-1],['nutrient'])
+    with pytest.raises(ValueError,match='found 2'):select_files(files+[files[0]],['nutrient'])
+
+
+def test_drive_download_atomic_and_repeatable(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    import checkpoint_download as cd
+    import gdown
+    monkeypatch.setattr(cd,'model_directory',lambda task:str(tmp_path/task))
+    files=[SimpleNamespace(path='nutrient/'+name,id=str(i)) for i,name in enumerate(cd.EXPECTED['nutrient'])]
+    monkeypatch.setattr(gdown,'download_folder',lambda **kwargs: files)
+    def download(**kwargs):
+        assert kwargs['verify'] is True
+        Path(kwargs['output']).write_bytes(b'fixture-not-model-weights')
+        return kwargs['output']
+    monkeypatch.setattr(gdown,'download',download)
+    assert len(cd.download_checkpoints(['nutrient']))==4
+    assert cd.download_checkpoints(['nutrient'])==[]
+    assert len(list((tmp_path/'nutrient').glob('*.pth.sha256')))==4
+    assert not list(tmp_path.rglob('*.download'))

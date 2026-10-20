@@ -44,3 +44,11 @@ See `CHANGELOG.md` and `TEST_REPORT.md`. Changes are local and have not been com
 ## Portable model paths
 
 The configured Windows folders are `D:\rocole_github_deploy\models\nutrient` and `D:\rocole_github_deploy\models\disease`. Local checkout `models/<task>` folders are preferred when present. `ROCOLE_NUTRIENT_DIR` and `ROCOLE_DISEASE_DIR` process variables override discovery. Existing Colab folders remain a fallback. This only configures locations; model files must exist on the actual machine running Streamlit. See [model placement](models/README.md).
+
+## Automatic Google Drive checkpoint fetching
+
+When RUN NEURAL SCAN detects missing checkpoint files for the selected task, it automatically attempts to fetch that task's four exact filenames from the supplied Drive folder. There is no download button. Both disease and nutrient sets are supported. Existing local checkpoints are preserved. The folder must allow downloads without interactive sign-in. Downloaded artifacts stay on the running machine; restarts/redeployments that discard local storage require fetching them again. TLS verification remains enabled. Acquired SHA-256 hashes are recorded, but no original-computer hash comparison has been made. Model compatibility is still checked by the original strict loader.
+
+`python checkpoint_download.py` can prefetch all eight files during operator setup. It is not automatically executed by merely pushing this repository. This development environment's proxy returned 403 for live Drive access; no actual model download or inference has been verified here.
+
+The app reads GEMINI_API_KEY from Streamlit Secrets or process configuration. Set it once in the deployed Streamlit app's Secrets settings. The developer environment's secret bindings are separate from Streamlit Cloud; API credentials are never committed into application source.

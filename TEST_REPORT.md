@@ -2,7 +2,7 @@
 
 Current run: Python 3.12, Streamlit 1.66.0, torch 2.14.1+cpu, timm 1.0.30.
 
-`/workspace/rocole-venv/bin/python -m pytest -q tests`: **12 passed**.
+`/workspace/rocole-venv/bin/python -m pytest -q tests`: **14 passed**.
 
 - SQLite account isolation: another owner cannot read profiles, list scans, retrieve images or delete records. Reopened database retains the owner's result and PNG. Owner deletion succeeds.
 - PDF generation from synthetic scan/image: valid PDF structure; probability indicators and invalid/non-finite input rejection checked.
@@ -25,3 +25,5 @@ No Git push or deployment performed. Environment setup/startup instructions were
 Portable path update: two additional tests verify nutrient/disease directory discovery and process overrides, invalid task rejection, and exact checkpoint filename resolution from a portable task folder. The path fixture is not model weights; no inference validation is claimed.
 
 Composer/navigation update: two added tests verify the exact five navigation choices, recovery from a stale SYSTEM selection, native chat-input microphone enabled, absence of the old voice expander/audio widget, and mocked transcription returning a review draft without sending a Coffee AI question. Actual browser microphone permission/capture remains untested.
+
+Automatic checkpoint fetch: two tests verify exact-name selection, refusal of missing/duplicate matches, mocked artifact download with verified TLS, temporary-file cleanup, hash recording and repeatability without re-downloading existing files. Live Drive folder/download access failed with proxy HTTP 403; no real checkpoint was acquired or run. These tests do not establish actual folder contents, original-file equivalence or trained-model accuracy.

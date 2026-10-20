@@ -1345,7 +1345,24 @@ def scan_page():
                 with pipeline.container():
                     render_pipeline(states)
             st.session_state.analysis_result = None
-            result = run_scan(image, task, st.session_state.specimen_hash, update)
+            ready = True
+            missing = []
+            for model_name in MODEL_ARCHS:
+                try:
+                    resolve_checkpoint(task, model_name)
+                except FileNotFoundError:
+                    missing.append(model_name)
+            if missing:
+                from checkpoint_download import download_checkpoints
+                try:
+                    with st.spinner("Fetching missing trained checkpoints from your Google Drive folder..."):
+                        download_checkpoints(tasks=(task.lower(),))
+                    checkpoint_candidates.clear()
+                except Exception as exc:
+                    ready = False
+                    st.error("Could not fetch the trained checkpoints from Drive. Please retry the scan. Check folder sharing and the expected filenames.")
+                    st.caption(safe_detail(f"{type(exc).__name__}: {exc}"))
+            result = run_scan(image, task, st.session_state.specimen_hash, update) if ready else None
             st.session_state.analysis_result = result
             if result:
                 st.session_state.scan_counter += 1
