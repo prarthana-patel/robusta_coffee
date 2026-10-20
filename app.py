@@ -1391,10 +1391,14 @@ def scan_page():
 # ========================= COFFEE AI PAGE =========================
 def chat_page():
     markup("""<style>
-    [data-testid="stChatInput"]{background:var(--surface)!important;border:1px solid var(--line)!important;border-radius:28px!important}
-    [data-testid="stChatInput"] textarea{background:transparent!important;color:var(--text)!important;caret-color:var(--text)!important}
+    [data-testid="stChatInput"]{background:var(--surface)!important;border:0!important;border-radius:28px!important}
+    [data-testid="stChatInput"]>div{background:var(--surface)!important;color:var(--text)!important;border:1px solid var(--line)!important;border-radius:28px!important;box-shadow:none!important}
+    [data-testid="stChatInput"]>div:focus-within{border-color:var(--accent)!important;box-shadow:0 0 0 1px var(--accent)!important}
+    [data-testid="stChatInput"] textarea,[data-testid="stChatInput"] textarea:focus{background:transparent!important;color:var(--text)!important;caret-color:var(--text)!important;border:0!important;border-radius:0!important;outline:none!important;box-shadow:none!important}
     [data-testid="stChatInput"] textarea::placeholder{color:var(--muted)!important;opacity:1!important}
-    [data-testid="stChatInput"] button{color:var(--text)!important}
+    [data-testid="stChatInput"] button{background:var(--surface2)!important;color:var(--text)!important;border:0!important}
+    [data-testid="stChatInput"] button:hover:not(:disabled){background:var(--accent)!important;color:var(--bg)!important}
+    [data-testid="stChatInput"] button:disabled{color:var(--muted)!important;opacity:.6!important}
     </style>""")
     page_heading("ROCOLE // COFFEE AI", "ASK<br><em>ROCOLE.</em>")
     st.write("Coffee knowledge without the language barrier.")
