@@ -12,6 +12,15 @@ EXPECTED = {
 }
 
 
+# Explicitly supplied nutrient checkpoint links (ordered as in the user's screenshot).
+DIRECT_IDS = {
+    'convnextv2_tiny_final_checkpoint.pth': '108wUvxRKaZPFiuTMF0t4ApmUYHHFUqND',
+    'mambaout_tiny_final_checkpoint.pth': '1w145BMdHndL8ZWBVUtPYJiMHO1xLSPB4',
+    'maxvit_tiny_recovered.pth': '1KDcXJu7-3RAhB5DV1E3Ajngi9zDCZ_Oi',
+    'swin_best.pth': '1U4CJzeSHZEi1Pp8BEobBhmKMXUBtsG3m',
+}
+
+
 def select_files(files, tasks):
     selected=[]
     for task in tasks:
@@ -34,10 +43,16 @@ def download_checkpoints(tasks=('disease','nutrient'), progress=None):
         pending=[task for task in tasks if any(not (Path(model_directory(task))/name).is_file() for name in EXPECTED[task])]
         if not pending:
             return []
-        files=gdown.download_folder(url=FOLDER_URL,quiet=True,skip_download=True,verify=True,use_cookies=False,timeout=(10,60))
-        if not files:
-            raise ValueError('Drive returned no files. Share the model folder as Anyone with the link / Viewer.')
-        selected=select_files(files,pending)
+        # Nutrient checkpoints use direct, user-supplied file IDs. Disease keeps
+        # the original folder discovery until its direct IDs are provided.
+        folder_tasks=[task for task in pending if task != 'nutrient']
+        files=[]
+        if folder_tasks:
+            files=gdown.download_folder(url=FOLDER_URL,quiet=True,skip_download=True,verify=True,use_cookies=False,timeout=(10,60))
+            if not files:
+                raise ValueError('Drive returned no disease files. Check folder sharing.')
+        selected=select_files(files,folder_tasks) if folder_tasks else []
+        selected.extend(('nutrient',name,DIRECT_IDS[name]) for name in EXPECTED['nutrient'] if 'nutrient' in pending)
         downloaded=[]
         for task,filename,remote in selected:
             destination=Path(model_directory(task))/filename
@@ -48,7 +63,7 @@ def download_checkpoints(tasks=('disease','nutrient'), progress=None):
                 progress(f'Downloading {task}/{filename}…')
             temporary=destination.with_suffix(destination.suffix+'.download')
             try:
-                result=gdown.download(id=remote.id,output=str(temporary),quiet=True,verify=True,use_cookies=False,timeout=(10,60))
+                result=gdown.download(id=remote if isinstance(remote,str) else remote.id,output=str(temporary),quiet=True,verify=True,use_cookies=False,timeout=(10,60))
                 if not result or not temporary.is_file() or temporary.stat().st_size==0:
                     raise ValueError(f'Download failed for {filename}.')
                 with temporary.open('rb') as stream:
@@ -67,6 +82,8 @@ def download_checkpoints(tasks=('disease','nutrient'), progress=None):
                 temporary.unlink(missing_ok=True)
         # Class metadata is optional but never guessed; download only unambiguous sidecars.
         for task,filename,remote in selected:
+            if isinstance(remote,str):
+                continue  # Direct IDs have no known metadata sidecar folder.
             remote_parent=PurePosixPath(remote.path.replace('\\','/')).parent
             names=(Path(filename).with_suffix('.classes.json').name,'classes.json')
             for name in names:
