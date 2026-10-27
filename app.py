@@ -393,6 +393,7 @@ def run_scan(image, task, image_hash, update):
         tensor = tensor.to(device)
 
     for name in MODEL_ARCHS:
+        model_started = time.perf_counter()
         record = {"model": name, "task": task, "state": "LOADING", "steps": []}
         update(name, "LOADING")
         try:
@@ -425,6 +426,7 @@ def run_scan(image, task, image_hash, update):
             record["state"] = "COMPLETE"
         except Exception as exc:
             record.update(state="ERROR", error=safe_detail(f"{type(exc).__name__}: {exc}"))
+        record["elapsed_seconds"] = round(time.perf_counter() - model_started, 2)
         diagnostics.append(record)
         update(name, record["state"])
     st.session_state.model_diagnostics = diagnostics
@@ -1083,7 +1085,38 @@ def render_result(result, key):
     st.write(guidance(result["label"]))
     indicators = uncertainty(result)
     st.caption(f"Probability margin: {indicators['top_two_margin']:.3f} · normalized entropy: {indicators['normalized_entropy']:.3f}. Descriptive indicators only; probabilities are not calibrated risk estimates.")
-    st.caption("Severity: unavailable without a validated severity model. Grad-CAM: unavailable pending trained-checkpoint validation.")
+    st.caption("Severity: unavailable without a validated severity model.")
+    if st.button("GENERATE GRAD-CAM (ON DEMAND)", key=key+"_gradcam"):
+        image_for_cam = st.session_state.scan_images.get(result.get("record_id", str(result.get("scan_id"))))
+        if not image_for_cam:
+            st.warning("Original image is unavailable for this scan.")
+        else:
+            from gradcam_support import generate_cam
+            from PIL import Image as PILImage
+            try:
+                cam_image = PILImage.open(io.BytesIO(image_for_cam)).convert("RGB") if isinstance(image_for_cam, bytes) else image_for_cam
+                chosen = result["predictions"][0]
+                task = result["task"]
+                name = chosen["model"]
+                path = resolve_checkpoint(task, name)
+                mapping = st.session_state.mapping_overrides.get(task + "/" + name, "")
+                sidecars = [Path(path).with_suffix(".classes.json"), Path(path).parent / "classes.json"]
+                stamps = tuple((str(p), p.stat().st_mtime_ns) for p in sidecars if p.is_file())
+                if mapping:
+                    stamps += ((mapping, Path(mapping).stat().st_mtime_ns),)
+                torch, _, transforms = ml_runtime()
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                model, order, source = load_model_checked(name, task, path, Path(path).stat().st_mtime_ns, mapping, stamps, device)
+                tf = transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor(), transforms.Normalize([.485,.456,.406],[.229,.224,.225])])
+                input_tensor = tf(cam_image).unsqueeze(0).to(device)
+                class_idx = order.index(chosen["label"])
+                overlay, layer_name = generate_cam(model, input_tensor, cam_image, class_idx)
+                st.image(overlay, caption=f"Grad-CAM · {name} · {layer_name} (explanatory, not diagnostic)", width=480)
+            except Exception as exc:
+                st.warning("Grad-CAM could not be generated for this model: " + safe_detail(str(exc)))
+    with st.expander("MODEL EXECUTION TIMES"):
+        for record in st.session_state.get("model_diagnostics", []):
+            st.write(f'{record["model"]}: {record.get("elapsed_seconds", "n/a")} s · {record["state"]}')
     image_data = st.session_state.scan_images.get(result.get("record_id", str(result.get("scan_id"))))
     if image_data:
         st.image(image_data, caption="Original scan image", width=320)
